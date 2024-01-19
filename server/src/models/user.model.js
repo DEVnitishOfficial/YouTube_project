@@ -56,7 +56,7 @@ userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next();
   }
-  this.password = bcrypt.hash(this.password, 10);
+  this.password = await bcrypt.hash(this.password, 10);
   next();
   //  The bcrypt.hash function takes two arguments: the first is the data to be hashed (in this case, this.password), and the second is the salt rounds. The value 10 represents the number of rounds the hashing algorithm will execute. The higher the number of rounds, the more secure but slower the hashing process. In this case, 10 is a reasonable and commonly used value for a balance between security and performance.
 
