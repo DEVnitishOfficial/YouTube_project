@@ -20,4 +20,16 @@ app.use(express.urlencoded({
 app.use(express.static("public"))
 app.use(cookieParser())
 
+//routes import 
+import userRouter from './routes/user.routes.js'
+
+// routes decleration
+app.use("/api/v1/users",userRouter)
+
+
+app.use('*', (req,res) => {
+    res.status(404).send('OPPS!! 404 page not found')
+})
+
+
 export default app;
