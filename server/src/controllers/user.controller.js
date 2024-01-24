@@ -290,24 +290,33 @@ const updateUserCoverImage = asyncHandler(async(req,res) => {
   if(!coverImageLocalPath){
     throw new ApiError(400, "Cover image is missing")
   }
-const coverImage = await uploadOnCloudinary(coverImageLocalPath)
-
-if(!coverImage.url){
-  throw new ApiError(400,"Got error while uploading avatar")
- }
-
-const user = await User.findByIdAndUpdate(
-  req.userWithAccessToken?._id,
-  {
-    $set:{
-      coverImage:coverImage.url
-    }
-  },{new:true}
-  ).select("-password")
-
-  return res
-  .status(200)
-  .json(new ApiError(200,user,"Updated user cover image successfully"))
+try {
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+  console.log('coverImage',coverImage.url)
+  
+  if(!coverImage.url){
+    throw new ApiError(400,"Got error while uploading avatar")
+   }
+  
+  const user = await User.findByIdAndUpdate(
+    req.userWithAccessToken?._id,
+    {
+      $set:{
+        coverImage:coverImage.url
+      }
+    },{new:true}
+    ).select("-password")
+  
+    return res
+    .status(200)
+    .json(new ApiResponse(200,user,"Updated user cover image successfully"))
+} catch (error) {
+ return res
+ .status(500)
+ .json(
+  new ApiError(500,{error:error.message},"something went wrong while updating coverImage")
+ )
+}
 })
 
 const getUserChannelProfile = asyncHandler(async(req,res) => {
