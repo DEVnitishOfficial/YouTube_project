@@ -4,7 +4,7 @@ import {User} from "../models/user.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
-import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import {deleteFromCloudinary, uploadOnCloudinary} from "../utils/cloudinary.js"
 
 //TODO: get all videos based on query, sort, pagination
 const getAllVideos = asyncHandler(async (req, res) => {
@@ -20,16 +20,15 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
     //video
     const videoLocalPath =  req.files?.videoFile[0].path
-    console.log("reqFile",req.files)
 
     const cloud_video = await uploadOnCloudinary(videoLocalPath)
-    if(!cloud_video.url){
+    if(!cloud_video.secure_url){
         throw new ApiError(400,"Got error while uploading video on cloudinary")
     }
     //thumbnail
     const thumbnailLocalPath = req.files?.thumbnail[0].path
     const cloud_thumb = await uploadOnCloudinary(thumbnailLocalPath)
-    if(!cloud_thumb.url){
+    if(!cloud_thumb.secure_url){
         throw new ApiError(400,"Got error while uploading thumbnail on cloudinary")
     }
 
@@ -37,10 +36,20 @@ const publishAVideo = asyncHandler(async (req, res) => {
     const video = await Video.create({
         title,
         description,
-        videoFile : cloud_video.url,
-        thumbnail : cloud_thumb.url,
+        videoFile:{
+            public_id: cloud_video.public_id,
+            secure_url: cloud_video.secure_url,
+        },
+        thumbnail:{
+            public_id: cloud_thumb.public_id,
+            secure_url: cloud_thumb.secure_url
+        },
         owner : req.userWithAccessToken._id
     })
+
+    if(!video){
+        throw new ApiError(500,"video not created properly")
+    }
 
     return res
     .status(201)
@@ -54,11 +63,67 @@ const getVideoById = asyncHandler(async (req, res) => {
     //TODO: get video by id
 })
 
-const updateVideo = asyncHandler(async (req, res) => {
-    const { videoId } = req.params
-    //TODO: update video details like title, description, thumbnail
+ // Update video details like title, description, thumbnail
+ const updateVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    const { title, description } = req.body;
+    const thumbnail = req.file?.path;
 
-})
+    if (!isValidObjectId(videoId)) {
+        throw new ApiError(400, "video id is not valid");
+    }
+
+    if (!thumbnail || !(title || description)) {
+        throw new ApiError(400, "All fields are required");
+    }
+
+    const isVideoAvailable = await Video.findOne({
+        _id: videoId
+    });
+
+    if (!isVideoAvailable) {
+        throw new ApiError(400, "video not found");
+    }
+
+    // Deleting previous thumbnail on Cloudinary
+    if (isVideoAvailable.thumbnail?.public_id) {
+        await deleteFromCloudinary(isVideoAvailable.thumbnail.public_id, "image");
+    }
+
+    // Uploading new thumbnail to Cloudinary
+    const updatedNewThumbnail = await uploadOnCloudinary(thumbnail);
+
+    if (!updatedNewThumbnail.secure_url) {
+        throw new ApiError(500, "Got some error while uploading new thumbnail on cloudinary");
+    }
+
+    // Update video details in the database
+    const updatedVideo = await Video.findByIdAndUpdate(
+        videoId,
+        {
+            $set: {
+                title,
+                description,
+                'thumbnail.public_id': updatedNewThumbnail.public_id,
+                'thumbnail.secure_url': updatedNewThumbnail.secure_url
+            }
+        },
+        {
+            new: true
+        }
+    );
+
+    if (!updatedVideo) {
+        throw new ApiError(500, "video details not updated properly");
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, updatedVideo, "video updated successfully")
+        );
+});
+
 
 const deleteVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params
