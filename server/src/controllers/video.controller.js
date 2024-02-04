@@ -58,9 +58,26 @@ const publishAVideo = asyncHandler(async (req, res) => {
     )
 })
 
+ //TODO: get video by id
 const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params
-    //TODO: get video by id
+    console.log('videoid',videoId)
+
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"This video id is incorrect")
+    }
+
+  const video = await Video.findById({_id:videoId})
+  if(!video){
+    throw new ApiError(400,"video not found with the provided Id")
+  }
+  
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200,video,"video retrieved from db successfully")
+  )
+   
 })
 
  // Update video details like title, description, thumbnail
@@ -125,9 +142,44 @@ const getVideoById = asyncHandler(async (req, res) => {
 });
 
 
+//TODO: delete video
 const deleteVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params
-    //TODO: delete video
+    
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"Video id is not valid")
+    }
+
+    const video = await Video.findById({_id:videoId})
+    if(!video){
+        throw new ApiError(400,"video not found with provided id")
+    }
+
+    if(video.owner.toString() !== req.userWithAccessToken._id.toString()){
+        throw new ApiError(403,"You have no permission to delete this resources")
+    }
+
+    // deleting video and thumbnail from cloudinary
+    if(video.videoFile.public_id){
+      const delVideo =  await deleteFromCloudinary(video.videoFile.public_id,"video")
+    //   console.log('delvideo',delVideo)
+    }
+
+    if(video.thumbnail.public_id){
+       const delImg = await deleteFromCloudinary(video.thumbnail.public_id,"image")
+    //    console.log('delImg',delImg)
+    }
+
+    const deletedVideo = await Video.findByIdAndDelete({_id:videoId})
+
+    if(!deletedVideo){
+        throw new ApiError(500,"something went wrong while deleting video")
+    }
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200,{},"successfully deleted video")
+    )
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
