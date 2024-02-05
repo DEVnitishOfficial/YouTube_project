@@ -8,8 +8,71 @@ import {deleteFromCloudinary, uploadOnCloudinary} from "../utils/cloudinary.js"
 
 //TODO: get all videos based on query, sort, pagination
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
+    const { 
+        page = 1, 
+        limit = 10, 
+        query = `/^video/`, 
+        sortBy = "createdAt", 
+        sortType = 1, 
+        userId = req.userWithAccessToken._id 
+    } = req.query
+    
+    const user = await User.findById({_id:userId})
 
+    if(!user){
+        throw new ApiError(400,"user not found")
+    }
+
+   const getAllVideosAggregate = await Video.aggregate([
+        {
+            $match:{
+                owner : new mongoose.Types.ObjectId(userId),
+                $or:[
+                    { title:{ $regex : query, $options : 'i'}}, // $options : 'i' represent case insensentive
+                    { description:{ $regex : query, $options : 'i'} }
+                ]
+            }
+        },
+        {
+            $sort:{
+                [sortBy] : sortType // dynamically sorting document in increasing order on the basis of sortBy field(createdAt) and sortType value(1)
+                // if you set sortType = -1 then it will sort in decreasing order
+            }
+        },
+        {
+            $skip:(page - 1) * limit
+        },
+        {
+            $limit : parseInt(limit)
+        }
+    ])
+
+    Video.aggregatePaginate(getAllVideosAggregate, {page, limit})
+    .then((result)=>{
+        // console.log('result',result)
+        return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                result,
+                "fetched all videos successfully !!"
+            )
+        )
+    })
+    .catch((error)=>{
+        console.log("getting error while fetching all videos:",error)
+        throw error
+    })
+//    const sortedVideo = await Video.aggregatePaginate(getAllVideosAggregate,{page,limit})
+//    if(!sortedVideo){
+//     throw new ApiError(500,"something went wrong while applying aggregatePaginate on video")
+//    }
+//     return res
+//     .status(200)
+//     .json(
+//         new ApiResponse(200,{sortedVideo},"fetched all video successfully")
+//     )
 })
 
     // TODO: get video, upload to cloudinary, create video
@@ -184,6 +247,26 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
     const { videoId } = req.params
+
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"videoId is not valid")
+    }
+
+   const video = await Video.findById({_id : videoId})
+   if(!video){
+    throw new ApiError(400,"video not found with the provided id")
+   }
+   if(video.owner._id.toString() !== req.userWithAccessToken._id.toString()){
+    throw new ApiError(403,"You can't update video publish status")
+   }
+   video.isPublished = !video.isPublished
+  await video.save({validateBeforeSave:false})
+
+   return res
+   .status(200)
+   .json(
+    new ApiResponse(200,video,"video toggled successfully")
+    )
 })
 
 export {
