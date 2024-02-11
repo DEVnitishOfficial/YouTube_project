@@ -1,6 +1,6 @@
 import mongoose, {isValidObjectId} from "mongoose"
 import {Like} from "../models/like.model.js"
-import {User} from "../models/comment.model.js"
+import {User} from "../models/user.model.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
@@ -132,8 +132,38 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 
 // get all liked videos
 const getLikedVideos = asyncHandler(async (req, res) => {
-    const {userId} = req.params
-})
+    try {
+
+        // 1st approach by populate method
+        // const likedVideos = await Like.find({ video: { $exists: true } }).populate('video');
+
+        // second approach using aggregation pipeline
+        const likedVideos = await Like.aggregate([
+            {
+                $match: { video: { $exists: true } }
+            },
+            {
+                $lookup: {
+                    from: 'videos',
+                    localField: 'video',
+                    foreignField: '_id',
+                    as: 'video' //
+                }
+            },
+            {
+                $unwind: '$video' // Unwind the resulting array field 'video' to get individual documents
+            }
+        ]);
+
+       return res
+       .status(200)
+       .json(
+        new ApiResponse(200,likedVideos,"Get liked video successfully")
+       );
+    } catch (error) {
+        throw new ApiError(500,"something went wrong while getting liked video",error)
+    }
+});
 
 export {
     toggleCommentLike,
